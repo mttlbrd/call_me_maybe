@@ -1,0 +1,56 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Test & coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Type checkers
+.mypy_cache/
+.pyre/
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDEs
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.*
+
+# Hugging Face cache (optional)
+.cache/
+huggingface/
+
+# Generated output files
+data/output/*.json
+
+# Temporary files
+*.tmp
+*.bak
+
+# 42 subject
+en.subject.pdf
