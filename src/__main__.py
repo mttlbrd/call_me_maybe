@@ -1,51 +1,38 @@
-from json import JSONDecodeError
 from pathlib import Path
+
 from .cli import input_parser
-from pydantic import ValidationError
+from .prompt_builder import build_prompt
 from .loader import load_function, load_prompt
-from llm_sdk import Small_LLM_Model
-from .models import PromptInput
+from .llm_client import create_model, encode_prompt
 
 
-def test_model(prompts: list[PromptInput]) -> None:
-    model = Small_LLM_Model()
-
-    first_prompt = prompts[0].prompt
-
-    print(f"Prompt: {first_prompt}")
-
-    input_ids = model.encode(first_prompt)
-
-    print(f"Input ids shape: {input_ids.shape}")
-    print(f"Input ids: {input_ids}")
-
-    logits = model.get_logits_from_input_ids(
-        input_ids[0].tolist()
-    )
-
-    print(f"Vocabulary size: {len(logits)}")
-
-    print("First 10 logits:")
-    print(logits[:10])
-
-
-
-def main():
+def run() -> None:
     args = input_parser()
+    functions = load_function(Path(args.functions_definition))
+    prompts = load_prompt(Path(args.input))
 
+    print(f"Loaded functions: {len(functions)}")
+    print(f"Loaded prompts: {len(prompts)}")
+
+    print(f"Output path: {args.output}")
+
+    first_prompt = build_prompt(functions, prompts[0])
+    print(first_prompt)
+
+    print("Loading model...")
+    model = create_model()
+    print("Model loaded")
+
+    token_ids = encode_prompt(model, first_prompt)
+    print(token_ids)
+
+
+def main() -> None:
     try:
-        functions = load_function(Path(args.functions_definition))
-        prompts = load_prompt(Path(args.input))
-        output = Path(args.output)
+        run()
+    except Exception as e:
+        print(f"Error: {e}")
 
-        test_model(prompts)
-
-    except ValidationError:
-        print("Impossibile validare il .json")
-    except (FileNotFoundError, PermissionError):
-        print("file inesistente o senza permessi")
-    except JSONDecodeError:
-        print("File .json non valido")
 
 if __name__ == "__main__":
     main()

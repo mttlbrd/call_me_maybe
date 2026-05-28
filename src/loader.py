@@ -10,10 +10,10 @@ def load_json(path: Path) -> list[dict]:
 
 def load_function(path: Path) -> list[FunctionDefinition]:
     data = load_json(path)
-    
+
     return [
         FunctionDefinition.model_validate(item)
-            for item in data
+        for item in data
     ]
 
 
@@ -22,5 +22,5 @@ def load_prompt(path: Path) -> list[PromptInput]:
 
     return [
         PromptInput.model_validate(item)
-            for item in data
+        for item in data
     ]
