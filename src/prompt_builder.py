@@ -1,22 +1,12 @@
 from .models import FunctionDefinition, PromptInput
 
 
-def format_parameter(name: str, info: dict[str, str]) -> str:
-    """Formats a single parameter for display."""
-    return f"- {name}: {info['type']}"
-
-
-def format_parameters(function: FunctionDefinition) -> str:
-    """Formats the parameters of a function for display."""
-    return "\n".join(
-        format_parameter(name, info)
+def format_function(function: FunctionDefinition) -> str:
+    parameters = "\n".join(
+        f"- {name}: {info['type']}"
         for name, info in function.parameters.items()
     )
 
-
-def format_function(function: FunctionDefinition) -> str:
-    """Formats a function definition for display."""
-    parameters = format_parameters(function)
     return (
         f"{function.name}\n"
         f"Description: {function.description}\n"
@@ -25,28 +15,36 @@ def format_function(function: FunctionDefinition) -> str:
     )
 
 
-def format_functions(functions: list[FunctionDefinition]) -> str:
-    """Formats a list of function definitions for display."""
-    return "\n\n".join(
-        format_function(function)
-        for function in functions
-    )
-
-
 def build_prompt(
     functions: list[FunctionDefinition],
     prompt_input: PromptInput,
 ) -> str:
-    """Builds a prompt for the language model
-    based on the provided functions and prompt input."""
-    functions_text = format_functions(functions)
+    functions_text = "\n\n".join(
+        format_function(function)
+        for function in functions
+    )
 
     return (
-        "You are a function-calling assistant.\n\n"
+        "You are a strict function-calling assistant.\n"
+        "Your task is to choose the best function for the user request "
+        "and generate its parameters.\n\n"
+        "Rules:\n"
+        "- Return only one JSON object.\n"
+        "- Do not explain.\n"
+        "- Do not write Answer:.\n"
+        "- Do not repeat the JSON.\n"
+        "- The JSON must contain only these keys: name, parameters.\n"
+        "- The function name must be one of the available functions.\n"
+        "- The parameters must match the selected function schema.\n"
+        "- Use concrete values, not descriptions.\n"
+        "- If the user says asterisks, use \"*\".\n"
+        "- If the user says numbers or digits for a regex, use \"\\\\d+\".\n"
+        "- If the user says vowels for a regex, use \"[aeiouAEIOU]\".\n\n"
+        "JSON format:\n"
+        "{\"name\":\"function_name\",\"parameters\":{}}\n\n"
         "Available functions:\n\n"
         f"{functions_text}\n\n"
         "User request:\n"
         f"{prompt_input.prompt}\n\n"
-        "Return only valid JSON in this format:\n"
-        '{ "name": "function_name", "parameters": { } }'
+        "JSON:\n"
     )
