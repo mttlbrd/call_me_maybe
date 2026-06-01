@@ -2,6 +2,8 @@ import argparse
 
 
 def input_parser():
+    """Parse command line arguments for the function calling CLI tool."""
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--functions_definition",
