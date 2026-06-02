@@ -1,14 +1,30 @@
-import json
+import re
 from enum import Enum, auto
-
 
 class ParserState(Enum):
     START = auto()
     FUNCTION_NAME = auto()
     TRANSITION = auto()
     PARAMETERS = auto()
-    END = auto()
 
+def count_unquoted_braces(text: str) -> tuple[int, int]:
+    in_str = False
+    escaped = False
+    open_b = 0
+    close_b = 0
+    for char in text:
+        if escaped:
+            escaped = False
+        elif char == '\\':
+            escaped = True
+        elif char == '"':
+            in_str = not in_str
+        elif not in_str:
+            if char == '{':
+                open_b += 1
+            elif char == '}':
+                close_b += 1
+    return open_b, close_b
 
 def is_valid_token(token_str: str,
                    state: ParserState,
@@ -51,22 +67,22 @@ def is_valid_token(token_str: str,
         return False
 
     if state == ParserState.PARAMETERS:
-        if "}" in token_str:
-            try:
-                test_json = "{" + generated_text + token_str.replace("}", "") + "}"
-                parsed = json.loads(test_json)
-                if all(k in parsed for k in expected_keys):
-                    return True
-                return False
-            except json.JSONDecodeError:
-                return False
-        return True
+        found_keys = re.findall(r'"([^"]+)"\s*:', temp_text)
         
-    if state == ParserState.END:
-        return False
+        for key in found_keys:
+            if key not in expected_keys:
+                return False
+                
+        open_b, close_b = count_unquoted_braces(temp_text)
+        
+        if close_b > open_b:
+            unique_found_keys = set(found_keys)
+            if len(unique_found_keys) != len(expected_keys):
+                return False
+
+        return True
 
     return False
-
 
 def advance_state(token_str: str,
                   state: ParserState,
@@ -96,14 +112,8 @@ def advance_state(token_str: str,
         if new_text.startswith(expected):
             state = ParserState.PARAMETERS
             new_text = new_text[len(expected):]
-            return state, new_text, selected_func
-
-    if state == ParserState.PARAMETERS:
-        if "}" in token_str:
-            state = ParserState.END
 
     return state, new_text, selected_func
-
 
 def get_best_valid_token(logits: list[float],
                          id_to_token: dict,

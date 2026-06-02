@@ -5,8 +5,7 @@ from .cli import input_parser
 from .loader import load_function, load_prompt
 from .llm_client import create_model, encode_prompt, get_next_token_logits, decode_tokens
 from .prompt import build_minimal_prompt, build_full_prompt, build_pruned_prompt
-from .decoder import ParserState, advance_state, get_best_valid_token
-
+from .decoder import ParserState, advance_state, get_best_valid_token, count_unquoted_braces
 
 def load_vocabulary(model):
     vocab_path = model.get_path_to_vocab_file()
@@ -14,10 +13,8 @@ def load_vocabulary(model):
         vocab_dict = json.load(f)
     return {v: k for k, v in vocab_dict.items()}
 
-
 def rebuild_input_ids(model, prompt_text: str, generated_json: str) -> list[int]:
     return encode_prompt(model, prompt_text + generated_json)
-
 
 def process_single_prompt(model, id_to_token, functions, available_func_names, prompt_data):
     current_base_prompt = build_minimal_prompt(prompt_data.prompt)
@@ -57,7 +54,8 @@ def process_single_prompt(model, id_to_token, functions, available_func_names, p
             current_base_prompt = build_pruned_prompt(selected_func_obj, prompt_data.prompt)
             input_ids = rebuild_input_ids(model, current_base_prompt, full_generated_json)
 
-        if state == ParserState.END:
+        open_b, close_b = count_unquoted_braces(full_generated_json)
+        if open_b == close_b and open_b > 0:
             break
 
         if len(full_generated_json) > 500:
@@ -65,12 +63,10 @@ def process_single_prompt(model, id_to_token, functions, available_func_names, p
 
     return full_generated_json
 
-
 def save_results(results, output_path: Path):
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
-
 
 def main():
     args = input_parser()
@@ -85,10 +81,10 @@ def main():
     model = create_model()
     id_to_token = load_vocabulary(model)
     results = []
-    time_start = perf_counter()
+    total_start = perf_counter()
 
     for prompt_data in prompts:
-        time_prompt = perf_counter()
+        prompt_start = perf_counter()
         print(f"\n\033[1;30m--- '{prompt_data.prompt}' ---\033[0m")
 
         full_generated_json = process_single_prompt(
@@ -102,12 +98,11 @@ def main():
         except json.JSONDecodeError:
             pass
 
-        prompt_elapsed = perf_counter() - time_prompt
-        total_elapsed = perf_counter() - time_start
+        prompt_elapsed = perf_counter() - prompt_start
+        total_elapsed = perf_counter() - total_start
         print(f"\n\033[90m[tempo prompt: {prompt_elapsed:.2f}s | tempo totale: {total_elapsed:.2f}s]\033[0m")
 
     save_results(results, output_path)
-
 
 if __name__ == "__main__":
     main()
