@@ -1,13 +1,21 @@
 import re
 from enum import Enum, auto
 
+
 class ParserState(Enum):
+    """Represents the current state of the parser
+    as it processes the generated JSON."""
+
     START = auto()
     FUNCTION_NAME = auto()
     TRANSITION = auto()
     PARAMETERS = auto()
 
+
 def count_unquoted_braces(text: str) -> tuple[int, int]:
+    """Counts the number of unquoted opening and closing
+    braces in the text."""
+
     in_str = False
     escaped = False
     open_b = 0
@@ -26,12 +34,16 @@ def count_unquoted_braces(text: str) -> tuple[int, int]:
                 close_b += 1
     return open_b, close_b
 
+
 def is_valid_token(token_str: str,
                    state: ParserState,
                    generated_text: str,
                    available_functions: list[str],
                    expected_keys: list[str]
                    ) -> bool:
+    """Determines if a token is valid given the current parser state
+    and the text generated so far."""
+
     temp_text = generated_text + token_str
 
     if state == ParserState.START:
@@ -68,13 +80,13 @@ def is_valid_token(token_str: str,
 
     if state == ParserState.PARAMETERS:
         found_keys = re.findall(r'"([^"]+)"\s*:', temp_text)
-        
+
         for key in found_keys:
             if key not in expected_keys:
                 return False
-                
+
         open_b, close_b = count_unquoted_braces(temp_text)
-        
+
         if close_b > open_b:
             unique_found_keys = set(found_keys)
             if len(unique_found_keys) != len(expected_keys):
@@ -89,6 +101,10 @@ def advance_state(token_str: str,
                   generated_text: str,
                   available_functions: list[str]
                   ) -> tuple[ParserState, str, str | None]:
+    """Advances the parser state based on the newly generated token
+    and the text generated so far. Also returns the selected function name
+    if we just transitioned out of the FUNCTION_NAME state."""
+
     new_text = generated_text + token_str
     selected_func = None
 
@@ -115,6 +131,7 @@ def advance_state(token_str: str,
 
     return state, new_text, selected_func
 
+
 def get_best_valid_token(logits: list[float],
                          id_to_token: dict,
                          state: ParserState,
@@ -122,6 +139,9 @@ def get_best_valid_token(logits: list[float],
                          available_functions: list[str],
                          expected_keys: list[str]
                          ) -> int:
+    """Given the logits for the next token, returns the ID of the best valid token
+    based on the current parser state and the text generated so far."""
+
     for idx in range(len(logits)):
         token_str = id_to_token.get(idx, "")
         if not is_valid_token(token_str, state, generated_text, available_functions, expected_keys):

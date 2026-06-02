@@ -1,22 +1,43 @@
 import json
 from time import perf_counter
 from pathlib import Path
+
 from .cli import input_parser
 from .loader import load_function, load_prompt
-from .llm_client import create_model, encode_prompt, get_next_token_logits, decode_tokens
-from .prompt import build_minimal_prompt, build_full_prompt, build_pruned_prompt
-from .decoder import ParserState, advance_state, get_best_valid_token, count_unquoted_braces
+from .llm_client import (create_model, encode_prompt,
+                         get_next_token_logits, decode_tokens)
+from .prompt import (build_minimal_prompt,
+                     build_full_prompt, build_pruned_prompt)
+from .decoder import (ParserState, advance_state,
+                      get_best_valid_token, count_unquoted_braces)
+
 
 def load_vocabulary(model):
+    """Loads the model's vocabulary and returns
+    a mapping from token IDs to token strings."""
+
     vocab_path = model.get_path_to_vocab_file()
     with open(vocab_path, "r", encoding="utf-8") as f:
         vocab_dict = json.load(f)
     return {v: k for k, v in vocab_dict.items()}
 
-def rebuild_input_ids(model, prompt_text: str, generated_json: str) -> list[int]:
+
+def rebuild_input_ids(model, prompt_text: str, generated_json: str
+                      ) -> list[int]:
+    """Rebuilds the input IDs for the model based on the current prompt text
+    and the JSON generated so far.
+    This is necessary to ensure that the model's attention mechanism
+    has access to the full context, including the generated text,
+    which can help it generate valid JSON structures."""
+
     return encode_prompt(model, prompt_text + generated_json)
 
-def process_single_prompt(model, id_to_token, functions, available_func_names, prompt_data):
+
+def process_single_prompt(model, id_to_token, functions,
+                          available_func_names, prompt_data) -> str:
+    """Processes a single prompt through the function calling generation loop
+    and returns the full generated JSON string."""
+
     current_base_prompt = build_minimal_prompt(prompt_data.prompt)
     input_ids = rebuild_input_ids(model, current_base_prompt, "")
 
@@ -50,7 +71,7 @@ def process_single_prompt(model, id_to_token, functions, available_func_names, p
         elif old_state == ParserState.FUNCTION_NAME and state == ParserState.TRANSITION:
             selected_func_obj = next(f for f in functions if f.name == selected_func_name)
             expected_keys = list(selected_func_obj.parameters.keys())
-            
+
             current_base_prompt = build_pruned_prompt(selected_func_obj, prompt_data.prompt)
             input_ids = rebuild_input_ids(model, current_base_prompt, full_generated_json)
 
@@ -63,21 +84,29 @@ def process_single_prompt(model, id_to_token, functions, available_func_names, p
 
     return full_generated_json
 
+
 def save_results(results, output_path: Path):
+    """Saves the generated results to the specified
+    output path in JSON format."""
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
 
+
 def main():
+    """"Main function that orchestrates the loading of data,
+    processing of prompts, and saving of results."""
+
     args = input_parser()
     functions_path = Path(args.functions_definition)
     inputs_path = Path(args.input)
     output_path = Path(args.output)
-    
+
     functions = load_function(functions_path)
     prompts = load_prompt(inputs_path)
     available_func_names = [f.name for f in functions]
-    
+
     model = create_model()
     id_to_token = load_vocabulary(model)
     results = []
@@ -93,8 +122,8 @@ def main():
 
         try:
             parsed_result = json.loads(full_generated_json)
-            parsed_result["prompt"] = prompt_data.prompt
-            results.append(parsed_result)
+            ordered_result = {"prompt": prompt_data.prompt, **parsed_result}
+            results.append(ordered_result)
         except json.JSONDecodeError:
             pass
 
@@ -104,5 +133,12 @@ def main():
 
     save_results(results, output_path)
 
+
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nProcess interrupted by user. Exiting gracefully.")
+    except Exception as e:
+        print(f"\nAn error occurred: {e}")
+        print("Exiting gracefully :')")
