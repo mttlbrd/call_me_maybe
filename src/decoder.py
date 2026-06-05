@@ -2,7 +2,7 @@ import re
 from enum import Enum, auto
 
 
-class ParserState(Enum):
+class State(Enum):
     """Represents the current state of the parser
     as it processes the generated JSON."""
 
@@ -36,7 +36,7 @@ def count_unquoted_braces(text: str) -> tuple[int, int]:
 
 
 def is_valid_token(token_str: str,
-                   state: ParserState,
+                   state: State,
                    generated_text: str,
                    available_functions: list[str],
                    expected_keys: list[str]
@@ -46,7 +46,7 @@ def is_valid_token(token_str: str,
 
     temp_text = generated_text + token_str
 
-    if state == ParserState.START:
+    if state == State.START:
         if '{"name":"'.startswith(temp_text):
             return True
         if temp_text.startswith('{"name":"'):
@@ -59,18 +59,19 @@ def is_valid_token(token_str: str,
             return False
         return False
 
-    if state == ParserState.FUNCTION_NAME:
+    if state == State.FUNCTION_NAME:
         for func in available_functions:
             if func.startswith(temp_text):
                 return True
             if temp_text.startswith(func):
                 excess = temp_text[len(func):]
                 expected_transition = '","parameters":{'
-                if expected_transition.startswith(excess) or excess.startswith(expected_transition):
+                if (expected_transition.startswith(excess)
+                   or excess.startswith(expected_transition)):
                     return True
         return False
 
-    if state == ParserState.TRANSITION:
+    if state == State.TRANSITION:
         expected = '","parameters":{'
         if expected.startswith(temp_text):
             return True
@@ -78,7 +79,7 @@ def is_valid_token(token_str: str,
             return True
         return False
 
-    if state == ParserState.PARAMETERS:
+    if state == State.PARAMETERS:
         found_keys = re.findall(r'"([^"]+)"\s*:', temp_text)
 
         for key in found_keys:
@@ -96,11 +97,12 @@ def is_valid_token(token_str: str,
 
     return False
 
+
 def advance_state(token_str: str,
-                  state: ParserState,
+                  state: State,
                   generated_text: str,
                   available_functions: list[str]
-                  ) -> tuple[ParserState, str, str | None]:
+                  ) -> tuple[State, str, str | None]:
     """Advances the parser state based on the newly generated token
     and the text generated so far. Also returns the selected function name
     if we just transitioned out of the FUNCTION_NAME state."""
@@ -108,25 +110,25 @@ def advance_state(token_str: str,
     new_text = generated_text + token_str
     selected_func = None
 
-    if state == ParserState.START:
+    if state == State.START:
         if new_text.startswith('{"name":"'):
-            state = ParserState.FUNCTION_NAME
+            state = State.FUNCTION_NAME
             new_text = new_text[len('{"name":"'):]
         else:
             return state, new_text, selected_func
 
-    if state == ParserState.FUNCTION_NAME:
+    if state == State.FUNCTION_NAME:
         for func in available_functions:
             if new_text.startswith(func):
                 selected_func = func
-                state = ParserState.TRANSITION
+                state = State.TRANSITION
                 new_text = new_text[len(func):]
                 break
 
-    if state == ParserState.TRANSITION:
+    if state == State.TRANSITION:
         expected = '","parameters":{'
         if new_text.startswith(expected):
-            state = ParserState.PARAMETERS
+            state = State.PARAMETERS
             new_text = new_text[len(expected):]
 
     return state, new_text, selected_func
@@ -134,25 +136,47 @@ def advance_state(token_str: str,
 
 def get_best_valid_token(logits: list[float],
                          id_to_token: dict,
-                         state: ParserState,
+                         state: State,
                          generated_text: str,
                          available_functions: list[str],
-                         expected_keys: list[str]
+                         expected_keys: list[str],
+                         top_k: int = 50
                          ) -> int:
-    """Given the logits for the next token, returns the ID of the best valid token
+    """Given the logits for the next token,
+    returns the ID of the best valid token
     based on the current parser state and the text generated so far."""
 
-    for idx in range(len(logits)):
-        token_str = id_to_token.get(idx, "")
-        if not is_valid_token(token_str, state, generated_text, available_functions, expected_keys):
-            logits[idx] = float('-inf')
+    candidate_indices = sorted(
+        range(len(logits)),
+        key=lambda idx: logits[idx],
+        reverse=True,
+    )[:top_k]
 
-    best_idx = 0
-    max_logit = float('-inf')
+    def select_best_valid(indices: list[int]) -> int | None:
+        best_idx = None
+        max_logit = float('-inf')
 
-    for idx, val in enumerate(logits):
-        if val > max_logit:
-            max_logit = val
-            best_idx = idx
+        for idx in indices:
+            token_str = id_to_token.get(idx, "")
+            if not is_valid_token(token_str,
+                                  state, generated_text,
+                                  available_functions,
+                                  expected_keys):
+                continue
 
-    return best_idx
+            val = logits[idx]
+            if val > max_logit:
+                max_logit = val
+                best_idx = idx
+
+        return best_idx
+
+    best_idx = select_best_valid(candidate_indices)
+    if best_idx is not None:
+        return best_idx
+
+    fallback_idx = select_best_valid(list(range(len(logits))))
+    if fallback_idx is not None:
+        return fallback_idx
+
+    return candidate_indices[0] if candidate_indices else 0

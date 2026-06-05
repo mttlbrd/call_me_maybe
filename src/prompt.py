@@ -42,11 +42,10 @@ def build_pruned_prompt(selected_function, user_prompt: str) -> str:
     functions_json = json.dumps(function_data, indent=2)
     prompt = (
         "You are an expert system that extracts function calls from text.\n"
-        "Available functions:\n"
+        "Available function:\n"
         f"{functions_json}\n\n"
         f"User query: {user_prompt}\n"
         "Generate a JSON object with exactly 'name' and 'parameters' keys.\n"
-        "Do not generate any extra keys or information beyond the parameters of the selected function.\n"
         "Output:"
     )
     return prompt
