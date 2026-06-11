@@ -86,6 +86,40 @@ def save_results(results: list[dict[str, Any]], output_path: Path) -> None:
         json.dump(results, f, indent=2)
 
 
+def cast_parameters(parsed_result: Any,
+                    functions: list[FunctionDefinition]) -> None:
+    """Casts the generated parameters to their expected types (int or float)
+    based on the function definitions."""
+
+    if not isinstance(parsed_result, dict):
+        return
+    if "name" not in parsed_result or "parameters" not in parsed_result:
+        return
+
+    func_name = parsed_result["name"]
+    func_params = parsed_result["parameters"]
+
+    if not isinstance(func_params, dict):
+        return
+
+    func_def = next((f for f in functions if f.name == func_name), None)
+    if not func_def:
+        return
+
+    for p_name, p_val in func_params.items():
+        if p_name not in func_def.parameters:
+            continue
+
+        p_type = func_def.parameters[p_name].get("type")
+        try:
+            if p_type == "number":
+                func_params[p_name] = float(p_val)
+            elif p_type == "integer":
+                func_params[p_name] = int(float(p_val))
+        except (ValueError, TypeError):
+            pass
+
+
 def main() -> None:
     """"Main function that orchestrates the loading of data,
     processing of prompts, and saving of results."""
@@ -115,24 +149,7 @@ def main() -> None:
         try:
             parsed_result = json.loads(full_generated_json)
 
-            # Assicura il corretto tipo di dato (int o float) per formattare il JSON dump come richiesto
-            if isinstance(parsed_result, dict) and "name" in parsed_result and "parameters" in parsed_result:
-                func_name = parsed_result["name"]
-                func_params = parsed_result["parameters"]
-                func_def = next((f for f in functions if f.name == func_name), None)
-
-                if func_def and hasattr(func_def, "parameters") and isinstance(func_params, dict):
-                    for p_name, p_val in func_params.items():
-                        if p_name in func_def.parameters:
-                            p_info = func_def.parameters[p_name]
-                            p_type = p_info.get("type") if isinstance(p_info, dict) else getattr(p_info, "type", None)
-                            try:
-                                if p_type == "number":
-                                    func_params[p_name] = float(p_val)
-                                elif p_type == "integer":
-                                    func_params[p_name] = int(float(p_val))
-                            except (ValueError, TypeError):
-                                pass
+            cast_parameters(parsed_result, functions)
 
             ordered_result = {"prompt": prompt_data.prompt, **parsed_result}
             results.append(ordered_result)

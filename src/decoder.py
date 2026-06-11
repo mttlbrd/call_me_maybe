@@ -140,7 +140,7 @@ def get_best_valid_token(logits: list[float],
                          generated_text: str,
                          available_functions: list[str],
                          expected_keys: list[str],
-                         top_k: int = 50
+                         top_k: int = 30
                          ) -> int:
     """Given the logits for the next token,
     returns the ID of the best valid token
