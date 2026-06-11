@@ -1,14 +1,15 @@
 import json
 from pathlib import Path
+from typing import Any, cast
 from .models import FunctionDefinition, PromptInput
 
 
-def load_json(path: Path) -> list[dict]:
+def load_json(path: Path) -> list[dict[str, Any]]:
     """Utility function to load a JSON file and return
     its contents as a list of dictionaries."""
 
     with path.open("r", encoding="utf-8") as f:
-        return json.load(f)
+        return cast(list[dict[str, Any]], json.load(f))
 
 
 def load_function(path: Path) -> list[FunctionDefinition]:

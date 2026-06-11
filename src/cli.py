@@ -1,7 +1,7 @@
 import argparse
 
 
-def input_parser():
+def input_parser() -> argparse.Namespace:
     """Parse command line arguments for the function calling CLI tool."""
 
     parser = argparse.ArgumentParser()

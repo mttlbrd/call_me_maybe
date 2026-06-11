@@ -1,5 +1,7 @@
 import json
 
+from .models import FunctionDefinition
+
 
 def build_minimal_prompt(user_prompt: str) -> str:
     """Builds a minimal prompt without function definitions,
@@ -33,7 +35,8 @@ def build_full_prompt(functions: list, user_prompt: str) -> str:
     return prompt
 
 
-def build_pruned_prompt(selected_function, user_prompt: str) -> str:
+def build_pruned_prompt(selected_function: FunctionDefinition,
+                        user_prompt: str) -> str:
     """Builds a pruned prompt that only includes the selected
     function definition, used after the model has selected a function name.
     This helps guide the model to focus on generating the correct parameters"""

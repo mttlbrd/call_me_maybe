@@ -2,19 +2,25 @@ import json
 from time import perf_counter
 from pathlib import Path
 
+from typing import Any
+from llm_sdk import Small_LLM_Model
 from .cli import input_parser
 from .loader import load_function, load_prompt
 from .llm_client import (create_model,
                          get_next_token_logits, decode_tokens,
                          load_vocabulary, rebuild_input_ids)
+from .models import FunctionDefinition, PromptInput
 from .prompt import (build_minimal_prompt,
                      build_full_prompt, build_pruned_prompt)
 from .decoder import (State, advance_state,
                       get_best_valid_token, count_unquoted_braces)
 
 
-def process_single_prompt(model, id_to_token, functions,
-                          available_func_names, prompt_data) -> str:
+def process_single_prompt(model: Small_LLM_Model,
+                          id_to_token: dict[int, str],
+                          functions: list[FunctionDefinition],
+                          available_func_names: list[str],
+                          prompt_data: PromptInput) -> str:
     """Processes a single prompt through the function calling generation loop
     and returns the full generated JSON string."""
 
@@ -22,8 +28,8 @@ def process_single_prompt(model, id_to_token, functions,
     input_ids = rebuild_input_ids(model, current_base_prompt, "")
 
     state = State.START
-    generated_text = ""
-    full_generated_json = ""
+    generated_text: str = ""
+    full_generated_json: str = ""
     expected_keys: list[str] = []
 
     while True:
@@ -71,7 +77,7 @@ def process_single_prompt(model, id_to_token, functions,
     return full_generated_json
 
 
-def save_results(results, output_path: Path):
+def save_results(results: list[dict[str, Any]], output_path: Path) -> None:
     """Saves the generated results to the specified
     output path in JSON format."""
 
@@ -80,7 +86,7 @@ def save_results(results, output_path: Path):
         json.dump(results, f, indent=2)
 
 
-def main():
+def main() -> None:
     """"Main function that orchestrates the loading of data,
     processing of prompts, and saving of results."""
 
@@ -108,6 +114,26 @@ def main():
 
         try:
             parsed_result = json.loads(full_generated_json)
+
+            # Assicura il corretto tipo di dato (int o float) per formattare il JSON dump come richiesto
+            if isinstance(parsed_result, dict) and "name" in parsed_result and "parameters" in parsed_result:
+                func_name = parsed_result["name"]
+                func_params = parsed_result["parameters"]
+                func_def = next((f for f in functions if f.name == func_name), None)
+
+                if func_def and hasattr(func_def, "parameters") and isinstance(func_params, dict):
+                    for p_name, p_val in func_params.items():
+                        if p_name in func_def.parameters:
+                            p_info = func_def.parameters[p_name]
+                            p_type = p_info.get("type") if isinstance(p_info, dict) else getattr(p_info, "type", None)
+                            try:
+                                if p_type == "number":
+                                    func_params[p_name] = float(p_val)
+                                elif p_type == "integer":
+                                    func_params[p_name] = int(float(p_val))
+                            except (ValueError, TypeError):
+                                pass
+
             ordered_result = {"prompt": prompt_data.prompt, **parsed_result}
             results.append(ordered_result)
         except json.JSONDecodeError:

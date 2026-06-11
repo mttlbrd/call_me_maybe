@@ -1,4 +1,5 @@
 import json
+from typing import cast
 from llm_sdk import Small_LLM_Model
 
 
@@ -12,7 +13,7 @@ def encode_prompt(model: Small_LLM_Model, prompt: str) -> list[int]:
     """Encode a prompt and return the input IDs as a plain Python list."""
 
     token_ids = model.encode(prompt)
-    return token_ids[0].tolist()
+    return cast(list[int], token_ids[0].tolist())
 
 
 def get_next_token_logits(
@@ -21,7 +22,7 @@ def get_next_token_logits(
 ) -> list[float]:
     """Get the raw logits for the next token from the model."""
 
-    return model.get_logits_from_input_ids(input_ids)
+    return cast(list[float], model.get_logits_from_input_ids(input_ids))
 
 
 def decode_tokens(
@@ -30,20 +31,22 @@ def decode_tokens(
 ) -> str:
     """Decode token IDs back into a string using the model's tokenizer."""
 
-    return model.decode(token_ids)
+    return cast(str, model.decode(token_ids))
 
 
-def load_vocabulary(model):
+def load_vocabulary(model: Small_LLM_Model) -> dict[int, str]:
     """Loads the model's vocabulary and returns
     a mapping from token IDs to token strings."""
 
     vocab_path = model.get_path_to_vocab_file()
     with open(vocab_path, "r", encoding="utf-8") as f:
-        vocab_dict = json.load(f)
+        vocab_dict = cast(dict[str, int], json.load(f))
     return {v: k for k, v in vocab_dict.items()}
 
 
-def rebuild_input_ids(model, prompt_text: str, generated_json: str
+def rebuild_input_ids(model: Small_LLM_Model,
+                      prompt_text: str,
+                      generated_json: str
                       ) -> list[int]:
     """Rebuilds the input IDs for the model based on the current prompt text
     and the JSON generated so far.
