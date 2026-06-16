@@ -35,6 +35,45 @@ def count_unquoted_braces(text: str) -> tuple[int, int]:
     return open_b, close_b
 
 
+def _is_valid_start(temp_text: str, available_functions: list[str]) -> bool:
+    prefix = '{"name":"'
+    if prefix.startswith(temp_text):
+        return True
+    if temp_text.startswith(prefix):
+        excess = temp_text[len(prefix):]
+        if not excess:
+            return True
+        return any(func.startswith(excess) or excess.startswith(func) for func in available_functions)
+    return False
+
+
+def _is_valid_function_name(temp_text: str, available_functions: list[str]) -> bool:
+    for func in available_functions:
+        if func.startswith(temp_text):
+            return True
+        if temp_text.startswith(func):
+            excess = temp_text[len(func):]
+            expected_transition = '","parameters":{'
+            if expected_transition.startswith(excess) or excess.startswith(expected_transition):
+                return True
+    return False
+
+
+def _is_valid_parameters(temp_text: str, expected_keys: list[str]) -> bool:
+    found_keys = re.findall(r'"([^"]+)"\s*:', temp_text)
+
+    for key in found_keys:
+        if key not in expected_keys:
+            return False
+
+    open_b, close_b = count_unquoted_braces(temp_text)
+    if close_b > open_b:
+        unique_found_keys = set(found_keys)
+        if len(unique_found_keys) != len(expected_keys):
+            return False
+    return True
+
+
 def is_valid_token(token_str: str,
                    state: State,
                    generated_text: str,
@@ -47,53 +86,17 @@ def is_valid_token(token_str: str,
     temp_text = generated_text + token_str
 
     if state == State.START:
-        if '{"name":"'.startswith(temp_text):
-            return True
-        if temp_text.startswith('{"name":"'):
-            excess = temp_text[len('{"name":"'):]
-            if not excess:
-                return True
-            for func in available_functions:
-                if func.startswith(excess) or excess.startswith(func):
-                    return True
-            return False
-        return False
-
-    if state == State.FUNCTION_NAME:
-        for func in available_functions:
-            if func.startswith(temp_text):
-                return True
-            if temp_text.startswith(func):
-                excess = temp_text[len(func):]
-                expected_transition = '","parameters":{'
-                if (expected_transition.startswith(excess)
-                   or excess.startswith(expected_transition)):
-                    return True
-        return False
-
-    if state == State.TRANSITION:
+        return _is_valid_start(temp_text, available_functions)
+        
+    elif state == State.FUNCTION_NAME:
+        return _is_valid_function_name(temp_text, available_functions)
+        
+    elif state == State.TRANSITION:
         expected = '","parameters":{'
-        if expected.startswith(temp_text):
-            return True
-        if temp_text.startswith(expected):
-            return True
-        return False
-
-    if state == State.PARAMETERS:
-        found_keys = re.findall(r'"([^"]+)"\s*:', temp_text)
-
-        for key in found_keys:
-            if key not in expected_keys:
-                return False
-
-        open_b, close_b = count_unquoted_braces(temp_text)
-
-        if close_b > open_b:
-            unique_found_keys = set(found_keys)
-            if len(unique_found_keys) != len(expected_keys):
-                return False
-
-        return True
+        return expected.startswith(temp_text) or temp_text.startswith(expected)
+        
+    elif state == State.PARAMETERS:
+        return _is_valid_parameters(temp_text, expected_keys)
 
     return False
 
@@ -108,30 +111,23 @@ def advance_state(token_str: str,
     if we just transitioned out of the FUNCTION_NAME state."""
 
     new_text = generated_text + token_str
-    selected_func = None
 
     if state == State.START:
-        if new_text.startswith('{"name":"'):
-            state = State.FUNCTION_NAME
-            new_text = new_text[len('{"name":"'):]
-        else:
-            return state, new_text, selected_func
-
-    if state == State.FUNCTION_NAME:
+        prefix = '{"name":"'
+        if new_text.startswith(prefix):
+            return State.FUNCTION_NAME, new_text[len(prefix):], None
+            
+    elif state == State.FUNCTION_NAME:
         for func in available_functions:
             if new_text.startswith(func):
-                selected_func = func
-                state = State.TRANSITION
-                new_text = new_text[len(func):]
-                break
-
-    if state == State.TRANSITION:
+                return State.TRANSITION, new_text[len(func):], func
+                
+    elif state == State.TRANSITION:
         expected = '","parameters":{'
         if new_text.startswith(expected):
-            state = State.PARAMETERS
-            new_text = new_text[len(expected):]
+            return State.PARAMETERS, new_text[len(expected):], None
 
-    return state, new_text, selected_func
+    return state, new_text, None
 
 
 def get_best_valid_token(logits: list[float],
@@ -158,16 +154,11 @@ def get_best_valid_token(logits: list[float],
 
         for idx in indices:
             token_str = id_to_token.get(idx, "")
-            if not is_valid_token(token_str,
-                                  state, generated_text,
-                                  available_functions,
-                                  expected_keys):
-                continue
-
-            val = logits[idx]
-            if val > max_logit:
-                max_logit = val
-                best_idx = idx
+            if is_valid_token(token_str, state, generated_text, available_functions, expected_keys):
+                val = logits[idx]
+                if val > max_logit:
+                    max_logit = val
+                    best_idx = idx
 
         return best_idx
 

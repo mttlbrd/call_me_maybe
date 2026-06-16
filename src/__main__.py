@@ -51,21 +51,18 @@ def process_single_prompt(model: Small_LLM_Model,
             token_str, state, generated_text, available_func_names
         )
 
-        if old_state == State.START and state == State.FUNCTION_NAME:
-            current_base_prompt = build_full_prompt(functions,
-                                                    prompt_data.prompt)
-            input_ids = rebuild_input_ids(model, current_base_prompt,
-                                          full_generated_json)
+        # Handle dynamic prompt updates based on state transitions
+        if state != old_state:
+            if state == State.FUNCTION_NAME:
+                current_base_prompt = build_full_prompt(functions, prompt_data.prompt)
+                input_ids = rebuild_input_ids(model, current_base_prompt, full_generated_json)
 
-        elif old_state == State.FUNCTION_NAME and state == State.TRANSITION:
-            selected_func_obj = next(f for f in functions
-                                     if f.name == selected_func)
-            expected_keys = list(selected_func_obj.parameters.keys())
+            elif state == State.TRANSITION:
+                selected_func_obj = next(f for f in functions if f.name == selected_func)
+                expected_keys = list(selected_func_obj.parameters.keys())
 
-            current_base_prompt = build_pruned_prompt(selected_func_obj,
-                                                      prompt_data.prompt)
-            input_ids = rebuild_input_ids(model, current_base_prompt,
-                                          full_generated_json)
+                current_base_prompt = build_pruned_prompt(selected_func_obj, prompt_data.prompt)
+                input_ids = rebuild_input_ids(model, current_base_prompt, full_generated_json)
 
         open_b, close_b = count_unquoted_braces(full_generated_json)
         if open_b == close_b and open_b > 0:
